@@ -77,6 +77,16 @@ export interface DeployCommand {
 
 export type Phase = "playing" | "finished";
 
+/** Effet visuel transitoire (ex: explosion de boule de feu). */
+export interface Effect {
+  id: number;
+  kind: "fireball";
+  x: number;
+  y: number;
+  radius: number;
+  bornTick: number;
+}
+
 /** Instantané complet de l'état du jeu (sérialisable → réseau). */
 export interface GameState {
   tick: number;
@@ -85,5 +95,6 @@ export interface GameState {
   winner: Team | "draw" | null;
   units: Unit[];
   towers: Tower[];
+  effects: Effect[];
   elixir: Record<Team, number>;
 }

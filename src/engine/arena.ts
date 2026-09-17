@@ -1,5 +1,7 @@
 import type { Team, Tower } from "./types.js";
 
+export const ARENA_MID_X = 9;
+
 // Dimensions de l'arène en tuiles (repère : Clash Royale ≈ 18 x 32).
 export const ARENA_W = 18;
 export const ARENA_H = 32;
@@ -86,9 +88,40 @@ export function forwardDir(team: Team): number {
   return team === "red" ? 1 : -1;
 }
 
-/** Zone de déploiement autorisée pour un camp (moitié de terrain + ponts). */
-export function canDeploy(team: Team, x: number, y: number): boolean {
+/** Princesse ennemie protégeant un côté (gauche/droite) du terrain adverse. */
+function enemyPrincessOnSide(
+  team: Team,
+  x: number,
+  towers: Tower[]
+): Tower | undefined {
+  const enemy: Team = team === "blue" ? "red" : "blue";
+  const leftSide = x < ARENA_MID_X;
+  return towers.find(
+    (t) =>
+      t.team === enemy &&
+      t.kind === "princess" &&
+      (leftSide ? t.x < ARENA_MID_X : t.x >= ARENA_MID_X)
+  );
+}
+
+/**
+ * Zone de déploiement autorisée. Toujours sa propre moitié ; et, quand une
+ * princesse ennemie est détruite, la moitié correspondante du terrain adverse
+ * jusqu'à la ligne de cette tour (comme dans le vrai jeu).
+ */
+export function canDeployAt(team: Team, x: number, y: number, towers: Tower[]): boolean {
   if (x < 0.5 || x > ARENA_W - 0.5 || y < 0.5 || y > ARENA_H - 0.5) return false;
-  if (team === "blue") return y > RIVER_Y_MAX; // moitié basse
-  return y < RIVER_Y_MIN; // moitié haute
+
+  const ownHalf = team === "blue" ? y > RIVER_Y_MAX : y < RIVER_Y_MIN;
+  if (ownHalf) return true;
+
+  // Terrain ennemi : autorisé seulement si la princesse de ce côté est tombée.
+  const princess = enemyPrincessOnSide(team, x, towers);
+  if (princess && princess.hp > 0) return false;
+
+  const pRow = princess ? princess.y : team === "blue" ? 6.5 : ARENA_H - 6.5;
+  if (team === "blue") {
+    return y >= pRow - 1 && y < RIVER_Y_MIN;
+  }
+  return y <= pRow + 1 && y > RIVER_Y_MAX;
 }

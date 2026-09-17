@@ -1,6 +1,6 @@
 import { SimpleAI } from "../engine/ai.js";
 import { GameEngine } from "../engine/engine.js";
-import type { Team } from "../engine/types.js";
+import type { GameState, Team } from "../engine/types.js";
 import { NetClient } from "../net/client.js";
 import { WS_PORT } from "../net/protocol.js";
 import { Hud } from "./hud.js";
@@ -154,7 +154,7 @@ async function startSolo(): Promise<void> {
       acc -= TICK;
     }
     const state = engine.getState();
-    renderer.render(state);
+    renderer.render(state, hud.getSelected() ? localTeam : null);
     hud.update(state.elixir[localTeam], state.timeLeftS);
 
     if (state.phase === "finished" && !over && state.winner) {
@@ -199,10 +199,26 @@ async function startOnline(): Promise<void> {
   let hud: Hud | null = null;
   let localTeam: Team = "blue";
   let over = false;
+  let running = false;
+  let latestState: GameState | null = null;
 
   // Déclaré avant l'usage pour que les callbacks puissent fermer la connexion.
   let net: NetClient;
-  const teardown = (): void => teardownGame(renderer, hud, net);
+  const teardown = (): void => {
+    running = false;
+    teardownGame(renderer, hud, net);
+  };
+
+  // Boucle de rendu continue : rejoue le dernier instantané chaque frame pour
+  // des animations fluides (les instantanés réseau n'arrivent qu'à ~10 Hz).
+  const renderLoop = (): void => {
+    if (!running) return;
+    if (renderer && hud && latestState) {
+      renderer.render(latestState, hud.getSelected() ? localTeam : null);
+      hud.update(latestState.elixir[localTeam], latestState.timeLeftS);
+    }
+    requestAnimationFrame(renderLoop);
+  };
 
   net = new NetClient(url, {
     onOpen: () => (status.textContent = "En attente d'un adversaire…"),
@@ -233,12 +249,12 @@ async function startOnline(): Promise<void> {
             net.send({ type: "deploy", cardId, x, y });
             hud!.clearSelection();
           });
+          running = true;
+          requestAnimationFrame(renderLoop);
           break;
         }
         case "state": {
-          if (!renderer || !hud) return;
-          renderer.render(msg.state);
-          hud.update(msg.state.elixir[localTeam], msg.state.timeLeftS);
+          latestState = msg.state;
           break;
         }
         case "end": {

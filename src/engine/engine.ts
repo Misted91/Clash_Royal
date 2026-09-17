@@ -6,7 +6,7 @@ import {
   ELIXIR_START,
   MATCH_DURATION_S,
   RIVER_Y_MID,
-  canDeploy,
+  canDeployAt,
   createTowers,
   nearestBridgeX,
   onBridge,
@@ -15,6 +15,7 @@ import {
 import { CARDS } from "./cards.js";
 import type {
   DeployCommand,
+  Effect,
   GameState,
   Phase,
   Team,
@@ -23,6 +24,8 @@ import type {
 } from "./types.js";
 
 const TOWER_RADIUS = 1.3;
+/** Durée de vie d'un effet visuel, en ticks (20 Hz → ~0,7 s). */
+const EFFECT_LIFETIME_TICKS = 14;
 
 function dist(ax: number, ay: number, bx: number, by: number): number {
   const dx = ax - bx;
@@ -45,6 +48,7 @@ export class GameEngine {
   winner: Team | "draw" | null = null;
   units: Unit[] = [];
   towers: Tower[] = createTowers();
+  effects: Effect[] = [];
   elixir: Record<Team, number> = { blue: ELIXIR_START, red: ELIXIR_START };
 
   private nextId = 1000;
@@ -55,7 +59,7 @@ export class GameEngine {
     const card = CARDS[cmd.cardId];
     if (!card) return false;
     if (this.elixir[cmd.team] < card.cost) return false;
-    if (!canDeploy(cmd.team, cmd.x, cmd.y)) return false;
+    if (!canDeployAt(cmd.team, cmd.x, cmd.y, this.towers)) return false;
 
     this.elixir[cmd.team] -= card.cost;
 
@@ -89,6 +93,15 @@ export class GameEngine {
     const r = card.spellRadius ?? 0;
     const dmg = card.spellDamage ?? 0;
     const foe = other(team);
+    // Effet visuel d'explosion (rendu côté client).
+    this.effects.push({
+      id: this.nextId++,
+      kind: "fireball",
+      x,
+      y,
+      radius: r,
+      bornTick: this.tick,
+    });
     for (const u of this.units) {
       if (u.team === foe && dist(u.x, u.y, x, y) <= r) u.hp -= dmg;
     }
@@ -115,6 +128,11 @@ export class GameEngine {
 
     for (const u of this.units) this.updateUnit(u, dt);
     for (const t of this.towers) this.updateTower(t, dt);
+
+    // Purge des effets visuels périmés.
+    this.effects = this.effects.filter(
+      (e) => this.tick - e.bornTick < EFFECT_LIFETIME_TICKS
+    );
 
     this.cull();
     this.checkEnd();
@@ -306,6 +324,7 @@ export class GameEngine {
       winner: this.winner,
       units: this.units,
       towers: this.towers,
+      effects: this.effects,
       elixir: this.elixir,
     };
   }

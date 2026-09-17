@@ -1,4 +1,4 @@
-import { ARENA_W, RIVER_Y_MAX } from "./arena.js";
+import { ARENA_W, RIVER_Y_MIN } from "./arena.js";
 import { CARDS } from "./cards.js";
 import type { GameEngine } from "./engine.js";
 import type { Team } from "./types.js";
@@ -23,11 +23,11 @@ export class SimpleAI {
     const elixir = engine.elixir[this.team];
 
     // Menace : une unité bleue a franchi la rivière côté rouge ?
-    const threat = engine.units.find((u) => u.team === "blue" && u.y < RIVER_Y_MAX + 4);
+    const threat = engine.units.find((u) => u.team === "blue" && u.y < RIVER_Y_MIN + 3);
 
     let cardId: string | null = null;
     let x = Math.random() < 0.5 ? 4 : 14;
-    let y = RIVER_Y_MAX - 2; // juste avant la rivière, côté rouge
+    let y = RIVER_Y_MIN - 3; // dans sa moitié, juste avant la rivière
 
     if (threat) {
       // Défendre : poser une troupe pas chère près de la menace.
@@ -35,7 +35,7 @@ export class SimpleAI {
       if (options.length) {
         cardId = options[Math.floor(Math.random() * options.length)];
         x = Math.max(1, Math.min(ARENA_W - 1, threat.x));
-        y = Math.max(1, RIVER_Y_MAX - 3);
+        y = RIVER_Y_MIN - 2;
       }
     } else if (elixir >= 6) {
       // Attaquer : privilégier une combinaison géant + soutien.
