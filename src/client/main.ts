@@ -1,6 +1,6 @@
 import { SimpleAI } from "../engine/ai.js";
 import { GameEngine } from "../engine/engine.js";
-import type { GameState, Team } from "../engine/types.js";
+import type { Team } from "../engine/types.js";
 import { NetClient } from "../net/client.js";
 import { WS_PORT } from "../net/protocol.js";
 import { Hud } from "./hud.js";
@@ -9,16 +9,54 @@ import { Renderer } from "./renderer.js";
 const wrap = document.getElementById("stage-wrap") as HTMLDivElement;
 const menu = document.getElementById("menu") as HTMLDivElement;
 const status = document.getElementById("status") as HTMLDivElement;
+const btnSolo = document.getElementById("btn-solo") as HTMLButtonElement;
+const btnOnline = document.getElementById("btn-online") as HTMLButtonElement;
+
+/** Vrai dès qu'une partie (ou une recherche de partie) est en cours. */
+let started = false;
+
+function lockMenu(): void {
+  started = true;
+  btnSolo.disabled = true;
+  btnOnline.disabled = true;
+}
+
+function backToMenu(): void {
+  started = false;
+  btnSolo.disabled = false;
+  btnOnline.disabled = false;
+  menu.classList.remove("hidden");
+  status.textContent = "";
+}
 
 function viewportSize(): { w: number; h: number } {
   return { w: wrap.clientWidth || window.innerWidth, h: wrap.clientHeight || window.innerHeight };
+}
+
+/** Libère le rendu, l'interface et la connexion réseau d'une partie terminée. */
+function teardownGame(renderer: Renderer | null, hud: Hud | null, net: NetClient | null): void {
+  try {
+    net?.close();
+  } catch {
+    /* ignore */
+  }
+  hud?.root.remove();
+  if (renderer) {
+    const canvas = renderer.canvas;
+    try {
+      renderer.app.destroy({ removeView: true }, { children: true });
+    } catch {
+      /* ignore */
+    }
+    canvas?.remove();
+  }
 }
 
 /** Attache la gestion du clic/tap pour déployer une carte. */
 function attachDeploy(
   renderer: Renderer,
   hud: Hud,
-  canDeployNow: (cardId: string, x: number, y: number) => void
+  onDeploy: (cardId: string, x: number, y: number) => void
 ): void {
   renderer.canvas.style.cursor = "pointer";
   renderer.canvas.addEventListener("pointerdown", (e) => {
@@ -30,26 +68,55 @@ function attachDeploy(
     const px = (e.clientX - rect.left) * scaleX;
     const py = (e.clientY - rect.top) * scaleY;
     const { x, y } = renderer.screenToWorld(px, py);
-    canDeployNow(card, x, y);
+    onDeploy(card, x, y);
   });
 }
 
-function showBanner(renderer: Renderer, state: GameState, localTeam: Team): void {
-  if (state.phase !== "finished" || state.winner === null) return;
-  const msg =
-    state.winner === "draw"
-      ? "Égalité !"
-      : state.winner === localTeam
-      ? "Victoire ! 🏆"
-      : "Défaite…";
-  renderer.banner(msg);
+function endMessage(winner: Team | "draw", localTeam: Team): string {
+  if (winner === "draw") return "Égalité !";
+  return winner === localTeam ? "Victoire ! 🏆" : "Défaite…";
+}
+
+/** Overlay de fin de partie avec les boutons Rejouer / Menu. */
+function showEndScreen(text: string, onReplay: () => void, onMenu: () => void): void {
+  const overlay = document.createElement("div");
+  overlay.style.cssText =
+    "position:absolute;inset:0;z-index:20;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(14,17,22,.85);text-align:center;";
+
+  const title = document.createElement("div");
+  title.textContent = text;
+  title.style.cssText = "font-size:38px;font-weight:bold;color:#fff;";
+  overlay.appendChild(title);
+
+  const row = document.createElement("div");
+  row.style.cssText = "display:flex;gap:12px;flex-wrap:wrap;justify-content:center;";
+
+  const mk = (label: string, primary: boolean, onClick: () => void): HTMLButtonElement => {
+    const b = document.createElement("button");
+    b.textContent = label;
+    b.style.cssText = `padding:12px 26px;font-size:17px;border-radius:10px;cursor:pointer;border:1px solid ${
+      primary ? "#e879f9" : "#2d333b"
+    };background:${primary ? "#7e22ce" : "#161b22"};color:#fff;`;
+    b.onclick = () => {
+      overlay.remove();
+      onClick();
+    };
+    return b;
+  };
+
+  row.appendChild(mk("🔁 Rejouer", true, onReplay));
+  row.appendChild(mk("← Menu", false, onMenu));
+  overlay.appendChild(row);
+  wrap.appendChild(overlay);
 }
 
 // ---------------------------------------------------------------------------
 // Mode solo : moteur + IA tournent dans le navigateur.
 // ---------------------------------------------------------------------------
 async function startSolo(): Promise<void> {
+  lockMenu();
   menu.classList.add("hidden");
+
   const { w, h } = viewportSize();
   const localTeam: Team = "blue";
   const renderer = new Renderer(localTeam);
@@ -68,9 +135,16 @@ async function startSolo(): Promise<void> {
   const TICK = 1 / 20;
   let acc = 0;
   let last = performance.now();
+  let running = true;
   let over = false;
 
+  const teardown = (): void => {
+    running = false;
+    teardownGame(renderer, hud, null);
+  };
+
   function frame(now: number): void {
+    if (!running) return;
     const dt = Math.min(0.25, (now - last) / 1000);
     last = now;
     acc += dt;
@@ -82,9 +156,20 @@ async function startSolo(): Promise<void> {
     const state = engine.getState();
     renderer.render(state);
     hud.update(state.elixir[localTeam], state.timeLeftS);
-    if (state.phase === "finished" && !over) {
+
+    if (state.phase === "finished" && !over && state.winner) {
       over = true;
-      showBanner(renderer, state, localTeam);
+      showEndScreen(
+        endMessage(state.winner, localTeam),
+        () => {
+          teardown();
+          void startSolo();
+        },
+        () => {
+          teardown();
+          backToMenu();
+        }
+      );
     }
     requestAnimationFrame(frame);
   }
@@ -106,6 +191,7 @@ function resolveWsUrl(): string {
 }
 
 async function startOnline(): Promise<void> {
+  lockMenu();
   status.textContent = "Connexion au serveur…";
   const url = resolveWsUrl();
 
@@ -114,12 +200,20 @@ async function startOnline(): Promise<void> {
   let localTeam: Team = "blue";
   let over = false;
 
-  const net = new NetClient(url, {
+  // Déclaré avant l'usage pour que les callbacks puissent fermer la connexion.
+  let net: NetClient;
+  const teardown = (): void => teardownGame(renderer, hud, net);
+
+  net = new NetClient(url, {
     onOpen: () => (status.textContent = "En attente d'un adversaire…"),
-    onError: () =>
-      (status.textContent = `Impossible de joindre le serveur (${url}). Lance « npm run server ».`),
+    onError: () => {
+      net.close();
+      backToMenu();
+      status.textContent = `Impossible de joindre le serveur. Réessaie dans un instant (le serveur gratuit peut mettre ~50 s à se réveiller).`;
+    },
     onClose: () => {
-      if (!renderer) status.textContent = "Connexion fermée.";
+      // Déconnexion avant le début d'une partie → retour au menu.
+      if (!renderer) backToMenu();
     },
     onMessage: async (msg) => {
       switch (msg.type) {
@@ -148,14 +242,18 @@ async function startOnline(): Promise<void> {
           break;
         }
         case "end": {
-          if (!renderer || over) return;
+          if (over) return;
           over = true;
-          renderer.banner(
-            msg.winner === "draw"
-              ? "Égalité !"
-              : msg.winner === localTeam
-              ? "Victoire ! 🏆"
-              : "Défaite…"
+          showEndScreen(
+            endMessage(msg.winner, localTeam),
+            () => {
+              teardown();
+              void startOnline();
+            },
+            () => {
+              teardown();
+              backToMenu();
+            }
           );
           break;
         }
@@ -165,9 +263,11 @@ async function startOnline(): Promise<void> {
   net.connect();
 }
 
-document.getElementById("btn-solo")?.addEventListener("click", () => {
+btnSolo.addEventListener("click", () => {
+  if (started) return;
   void startSolo();
 });
-document.getElementById("btn-online")?.addEventListener("click", () => {
+btnOnline.addEventListener("click", () => {
+  if (started) return;
   void startOnline();
 });
