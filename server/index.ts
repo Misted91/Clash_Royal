@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { GameEngine } from "../src/engine/engine.js";
 import type { Team } from "../src/engine/types.js";
@@ -82,7 +83,19 @@ class Match {
 }
 
 // --- Matchmaking : on apparie les joueurs deux par deux. ---
-const wss = new WebSocketServer({ port: WS_PORT });
+// Serveur HTTP (pour le health check des hébergeurs type Render) + WebSocket.
+const PORT = Number(process.env.PORT) || WS_PORT;
+const httpServer = createServer((req, res) => {
+  if (req.url === "/health" || req.url === "/") {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("Web Royale server OK");
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
+
+const wss = new WebSocketServer({ server: httpServer });
 let waiting: WebSocket | null = null;
 
 wss.on("connection", (ws) => {
@@ -99,4 +112,6 @@ wss.on("connection", (ws) => {
   }
 });
 
-console.log(`Serveur Web Royale à l'écoute sur ws://localhost:${WS_PORT}`);
+httpServer.listen(PORT, () => {
+  console.log(`Serveur Web Royale à l'écoute sur le port ${PORT}`);
+});

@@ -94,10 +94,20 @@ async function startSolo(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Mode en ligne : le serveur fait autorité, le client rend les instantanés.
 // ---------------------------------------------------------------------------
+function resolveWsUrl(): string {
+  // Priorité : ?server=... dans l'URL, puis variable de build VITE_WS_URL,
+  // puis localhost pour le développement.
+  const param = new URLSearchParams(location.search).get("server");
+  if (param) return param;
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+  const proto = location.protocol === "https:" ? "wss" : "ws";
+  const host = location.hostname || "localhost";
+  return `${proto}://${host}:${WS_PORT}`;
+}
+
 async function startOnline(): Promise<void> {
   status.textContent = "Connexion au serveur…";
-  const host = location.hostname || "localhost";
-  const url = `ws://${host}:${WS_PORT}`;
+  const url = resolveWsUrl();
 
   let renderer: Renderer | null = null;
   let hud: Hud | null = null;

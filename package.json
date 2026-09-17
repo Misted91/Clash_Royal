@@ -8,16 +8,17 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "server": "tsx watch server/index.ts",
+    "start": "tsx server/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "pixi.js": "^8.6.6"
+    "pixi.js": "^8.6.6",
+    "tsx": "^4.19.2",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "tsx": "^4.19.2",
+    "@types/ws": "^8.5.13",
     "typescript": "^5.7.2",
-    "vite": "^6.0.5",
-    "ws": "^8.18.0",
-    "@types/ws": "^8.5.13"
+    "vite": "^6.0.5"
   }
 }

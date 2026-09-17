@@ -56,6 +56,52 @@ npm run server        # serveur WebSocket sur ws://localhost:8080
 Comment jouer : sélectionner une carte dans la barre du bas (si assez d'élixir),
 puis cliquer/taper sur votre moitié de terrain pour la déployer.
 
+## Mettre le jeu en ligne (lien partageable)
+
+Le jeu a deux parties à héberger différemment :
+
+| Partie | Hébergeur | Ce que ça donne |
+|---|---|---|
+| Client (le jeu) | **GitHub Pages** (automatisé) | Un lien public ; le **mode solo marche tout de suite** |
+| Serveur 1v1 | **Render** (offre gratuite) | Active le **mode en ligne** |
+
+### 1. Client sur GitHub Pages (automatique)
+
+Le workflow `.github/workflows/deploy.yml` build et publie le client à chaque
+push sur `main`. Une seule fois, dans le dépôt GitHub :
+
+1. **Settings → Pages → Source : GitHub Actions**.
+2. Merge cette branche dans `main` (ou lance le workflow via *Actions → Run workflow*).
+
+Le jeu est alors accessible à `https://<ton-user>.github.io/Clash_Royal/`.
+
+### 2. Serveur sur Render (pour le multijoueur)
+
+GitHub Pages ne peut pas faire tourner de serveur WebSocket. Déploie le serveur
+à part avec le blueprint fourni (`render.yaml`) :
+
+1. Compte sur [render.com](https://render.com) → **New → Blueprint** → connecte ce dépôt.
+2. Render lit `render.yaml`, installe et lance `npm start`. Tu obtiens une URL
+   du type `https://web-royale-server.onrender.com`.
+3. Dans GitHub : **Settings → Secrets and variables → Actions → Variables →
+   New variable** : nom `VITE_WS_URL`, valeur `wss://web-royale-server.onrender.com`
+   (le même domaine, en `wss://`).
+4. Relance le workflow Pages pour que le client pointe vers ton serveur.
+
+> Astuce : sans reconstruire, tu peux tester un serveur en ajoutant
+> `?server=wss://...` à l'URL du jeu.
+
+> ⚠️ Sur l'offre gratuite de Render, le serveur s'endort après inactivité :
+> la première connexion peut prendre ~30 s à réveiller le service.
+
+### Autres hébergeurs
+
+- **Client** : Vercel, Netlify, Cloudflare Pages fonctionnent aussi (build `npm run build`,
+  dossier `dist`). Pense à définir `VITE_WS_URL` dans leurs variables d'environnement.
+- **Serveur** : Railway, Fly.io, ou un petit VPS conviennent (tout hôte Node qui
+  garde une connexion WebSocket ouverte). Vercel/Netlify ne conviennent **pas**
+  au serveur (fonctions serverless sans WebSocket persistant).
+
 ## Pistes d'amélioration
 
 - Cartes supplémentaires (unités volantes, sorts de zone, bâtiments défensifs).

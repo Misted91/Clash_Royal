@@ -1,0 +1,13 @@
+# Blueprint Render : déploie le serveur WebSocket 1v1.
+# Sur https://dashboard.render.com → New → Blueprint → connecter ce dépôt.
+services:
+  - type: web
+    name: web-royale-server
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
