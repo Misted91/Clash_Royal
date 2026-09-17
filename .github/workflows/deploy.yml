@@ -2,7 +2,7 @@ name: Déploiement GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/intelligent-volta-0fy61q]
   workflow_dispatch: {}
 
 # Permissions nécessaires pour publier sur Pages.
