@@ -1,0 +1,23 @@
+{
+  "name": "web-royale",
+  "version": "0.1.0",
+  "description": "Un clone jouable de type Clash Royale en version web (TypeScript + PixiJS).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "server": "tsx watch server/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pixi.js": "^8.6.6"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.5",
+    "ws": "^8.18.0",
+    "@types/ws": "^8.5.13"
+  }
+}
